@@ -18,6 +18,10 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <string.h>
+#include <linux/if.h>
+#include <linux/wireless.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
 
 #include "hardware_legacy/wifi.h"
 #include "libwpa_client/wpa_ctrl.h"
@@ -49,12 +53,19 @@ static char iface[PROPERTY_VALUE_MAX];
 // sockets is in
 
 #ifndef WIFI_DRIVER_MODULE_PATH
-#define WIFI_DRIVER_MODULE_PATH         "/system/lib/modules/wlan.ko"
+#define WIFI_DRIVER_MODULE_PATH         "/wifi/libra.ko"
 #endif
 #ifndef WIFI_DRIVER_MODULE_NAME
-#define WIFI_DRIVER_MODULE_NAME         "wlan"
+#define WIFI_DRIVER_MODULE_NAME         "libra.ko"
+#endif
+#ifndef WIFI_SDIO_IF_DRIVER_MODULE_PATH
+#define WIFI_SDIO_IF_DRIVER_MODULE_PATH         "/wifi/librasdioif.ko"
+#endif
+#ifndef WIFI_SDIO_IF_DRIVER_MODULE_NAME
+#define WIFI_SDIO_IF_DRIVER_MODULE_NAME "librasdioif"
 #endif
 #ifndef WIFI_DRIVER_MODULE_ARG
+#define WIFI_SDIO_IF_DRIVER_MODULE_ARG  ""
 #define WIFI_DRIVER_MODULE_ARG          ""
 #endif
 #ifndef WIFI_FIRMWARE_LOADER
@@ -64,11 +75,14 @@ static char iface[PROPERTY_VALUE_MAX];
 
 #define WIFI_DRIVER_LOADER_DELAY	1000000
 
-static const char IFACE_DIR[]           = "/data/system/wpa_supplicant";
+static const char IFACE_DIR[]           = "/data/misc/wifi/wpa_supplicant";
 static const char DRIVER_MODULE_NAME[]  = WIFI_DRIVER_MODULE_NAME;
+static const char DRIVER_SDIO_IF_MODULE_NAME[]  = WIFI_SDIO_IF_DRIVER_MODULE_NAME;
 static const char DRIVER_MODULE_TAG[]   = WIFI_DRIVER_MODULE_NAME " ";
 static const char DRIVER_MODULE_PATH[]  = WIFI_DRIVER_MODULE_PATH;
+static const char DRIVER_SDIO_IF_MODULE_PATH[]  = WIFI_SDIO_IF_DRIVER_MODULE_PATH;
 static const char DRIVER_MODULE_ARG[]   = WIFI_DRIVER_MODULE_ARG;
+static const char DRIVER_SDIO_IF_MODULE_ARG[]   = WIFI_SDIO_IF_DRIVER_MODULE_ARG;
 static const char FIRMWARE_LOADER[]     = WIFI_FIRMWARE_LOADER;
 static const char DRIVER_PROP_NAME[]    = "wlan.driver.status";
 static const char SUPPLICANT_NAME[]     = "wpa_supplicant";
@@ -76,6 +90,8 @@ static const char SUPP_PROP_NAME[]      = "init.svc.wpa_supplicant";
 static const char SUPP_CONFIG_TEMPLATE[]= "/system/etc/wifi/wpa_supplicant.conf";
 static const char SUPP_CONFIG_FILE[]    = "/data/misc/wifi/wpa_supplicant.conf";
 static const char MODULE_FILE[]         = "/proc/modules";
+static const char SDIO_POLLING_ON[]     = "/etc/init.qcom.sdio.sh 1";
+static const char SDIO_POLLING_OFF[]    = "/etc/init.qcom.sdio.sh 0";
 
 static int insmod(const char *filename, const char *args)
 {
@@ -170,13 +186,24 @@ int wifi_load_driver()
 {
     char driver_status[PROPERTY_VALUE_MAX];
     int count = 100; /* wait at most 20 seconds for completion */
+    int status = -1;
 
     if (check_driver_loaded()) {
         return 0;
     }
 
-    if (insmod(DRIVER_MODULE_PATH, DRIVER_MODULE_ARG) < 0)
-        return -1;
+    property_set(DRIVER_PROP_NAME, "loading");
+
+    if(system(SDIO_POLLING_ON))
+        LOGW("Couldn't turn on SDIO polling: %s", SDIO_POLLING_ON);
+
+    if (insmod(DRIVER_SDIO_IF_MODULE_PATH, DRIVER_SDIO_IF_MODULE_ARG) < 0)
+        goto end;
+
+    if (insmod(DRIVER_MODULE_PATH, DRIVER_MODULE_ARG) < 0) {
+        rmmod(DRIVER_SDIO_IF_MODULE_NAME);
+        goto end;
+    }
 
     if (strcmp(FIRMWARE_LOADER,"") == 0) {
         usleep(WIFI_DRIVER_LOADER_DELAY);
@@ -188,35 +215,73 @@ int wifi_load_driver()
     sched_yield();
     while (count-- > 0) {
         if (property_get(DRIVER_PROP_NAME, driver_status, NULL)) {
-            if (strcmp(driver_status, "ok") == 0)
-                return 0;
-            else if (strcmp(DRIVER_PROP_NAME, "failed") == 0) {
+            if (strcmp(driver_status, "ok") == 0) {
+                status = 0;
+                goto end;
+            }
+            else if (strcmp(driver_status, "failed") == 0) {
                 wifi_unload_driver();
-                return -1;
+                goto end;
             }
         }
         usleep(200000);
     }
     property_set(DRIVER_PROP_NAME, "timeout");
     wifi_unload_driver();
-    return -1;
+
+end:
+    system(SDIO_POLLING_OFF);
+    return status;
 }
 
 int wifi_unload_driver()
 {
     int count = 20; /* wait at most 10 seconds for completion */
+    char driver_status[PROPERTY_VALUE_MAX];
+    int s, ret;
+    struct iwreq wrq;
+
+    /*
+     * If the driver is loaded, ask it to broadcast a netlink message
+     * that it will be closing, so listeners can close their sockets.
+     */
+
+    if (property_get(DRIVER_PROP_NAME, driver_status, NULL)) {
+        if (strcmp(driver_status, "ok") == 0) {
+
+            /* Equivalent to: iwpriv wlan0 sendModuleInd */
+            if ((s = socket(PF_INET, SOCK_DGRAM, 0)) >= 0) {
+                strncpy(wrq.ifr_name, "wlan0", IFNAMSIZ);
+                wrq.u.data.length = 0; /* No Set arguments */
+                wrq.u.mode = 5; /* WE_MODULE_DOWN_IND sub-command */
+                ret = ioctl(s, (SIOCIWFIRSTPRIV + 1), &wrq);
+                close(s);
+                if (ret < 0 ) {
+                    LOGE("ioctl failed: %s", strerror(errno));
+                }
+                sched_yield();
+            }
+            else {
+                LOGE("Socket open failed: %s", strerror(errno));
+            }
+        }
+    }
 
     if (rmmod(DRIVER_MODULE_NAME) == 0) {
-	while (count-- > 0) {
-	    if (!check_driver_loaded())
-		break;
-    	    usleep(500000);
-	}
-	if (count) {
-    	    return 0;
-	}
-	return -1;
-    } else
+        while (count-- > 0) {
+            if (!check_driver_loaded())
+                break;
+            usleep(500000);
+        }
+        if (count) {
+            if (rmmod(DRIVER_SDIO_IF_MODULE_NAME) == 0) {
+                return 0;
+            }
+        }
+
+        return -1;
+    }
+    else
         return -1;
 }
 
@@ -225,9 +290,17 @@ int ensure_config_file_exists()
     char buf[2048];
     int srcfd, destfd;
     int nread;
+    struct stat st;
 
     if (access(SUPP_CONFIG_FILE, R_OK|W_OK) == 0) {
-        return 0;
+        if( stat( SUPP_CONFIG_FILE, &st ) < 0 ) {
+          LOGE("Cannot stat the file \"%s\": %s", SUPP_CONFIG_FILE, strerror(errno));
+          return -1;
+        }
+        //check if config file has some data or is it empty due to previous errors
+        if( st.st_size )
+          return 0;
+        //else continue to write the config from default template.
     } else if (errno != ENOENT) {
         LOGE("Cannot access \"%s\": %s", SUPP_CONFIG_FILE, strerror(errno));
         return -1;
