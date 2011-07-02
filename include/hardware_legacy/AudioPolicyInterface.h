@@ -91,7 +91,7 @@ public:
                                         uint32_t channels = 0,
                                         AudioSystem::output_flags flags = AudioSystem::OUTPUT_FLAG_INDIRECT) = 0;
     // request a session appriate for tunnel mode/batch decoding session of the supplied stream type and parameters
-/*
+
     virtual audio_io_handle_t getSession(AudioSystem::stream_type stream,
                                         uint32_t format = AudioSystem::FORMAT_DEFAULT,
                                         AudioSystem::output_flags flags = AudioSystem::OUTPUT_FLAG_DIRECT,
@@ -103,14 +103,14 @@ public:
     // requests to release an ongoing tunnel mode/ batch decode session.
     virtual void releaseSession(audio_io_handle_t output) {return;};
     // indicates to the audio policy manager that the output starts being used by corresponding stream.
-*/
+
     virtual status_t startOutput(audio_io_handle_t output,
-                                 AudioSystem::stream_type stream,
-                                 int session = 0) = 0;
+                                 AudioSystem::stream_type stream ) =0;
+//                                 int session = 0) = 0;
     // indicates to the audio policy manager that the output stops being used by corresponding stream.
     virtual status_t stopOutput(audio_io_handle_t output,
-                                AudioSystem::stream_type stream,
-                                int session = 0) = 0;
+                                AudioSystem::stream_type stream )=0;
+//                                int session = 0) = 0;
     // releases the output.
     virtual void releaseOutput(audio_io_handle_t output) = 0;
 
@@ -182,7 +182,7 @@ public:
     // in case the audio policy manager has no specific requirements for the output being opened.
     // When the function returns, the parameter values reflect the actual values used by the audio hardware output stream.
     // The audio policy manager can check if the proposed parameters are suitable or not and act accordingly.
-/*
+
     virtual audio_io_handle_t openSession(uint32_t *pDevices,
                                     uint32_t *pFormat,
                                     AudioSystem::output_flags flags,
@@ -191,7 +191,7 @@ public:
 
     // closes the output audio session. 
     virtual status_t closeSession(audio_io_handle_t output) {return 0;};
-*/
+
     // creates a special output that is duplicated to the two outputs passed as arguments. The duplication is performed by
     // a special mixer thread in the AudioFlinger.
     virtual audio_io_handle_t openDuplicateOutput(audio_io_handle_t output1, audio_io_handle_t output2) = 0;
