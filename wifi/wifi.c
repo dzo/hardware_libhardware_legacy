@@ -48,6 +48,8 @@ extern void get_dhcp_info();
 extern int init_module(void *, unsigned long, const char *);
 extern int delete_module(const char *, unsigned int);
 
+extern void huawei_oem_rapi_streaming_function(int n, int p1, int p2, int p3, char *v1, int *v2, int *v3);
+ 
 static char iface[PROPERTY_VALUE_MAX];
 // TODO: use new ANDROID_SOCKET mechanism, once support for multiple
 // sockets is in
@@ -93,17 +95,30 @@ static const char MODULE_FILE[]         = "/proc/modules";
 static const char SDIO_POLLING_ON[]     = "/etc/init.qcom.sdio.sh 1";
 static const char SDIO_POLLING_OFF[]    = "/etc/init.qcom.sdio.sh 0";
 
-static int insmod(const char *filename, const char *args)
+static int insmod(const char *filename,const char *args)
 {
     void *module;
     unsigned int size;
     int ret;
+    char x[8];
+    int  y;
+    char mac_param[64];
 
     module = load_file(filename, &size);
     if (!module)
         return -1;
 
-    ret = init_module(module, size, args);
+    if(strstr(filename,"libra.ko")) {
+        memset(x,0,8);
+	y=0;
+	huawei_oem_rapi_streaming_function(3,0,0,0,0,&y,x);
+        LOGI("huawei_oem_rapi_streaming_function %p %x %x",x,x[0],y);
+	sprintf(mac_param,"mac_param=%02X:%02X:%02X:%02X:%02X:%02X ",x[5],x[4],x[3],x[2],x[1],x[0]);
+        LOGI("Got MAC Address: %s ",mac_param);
+        ret = init_module(module, size, mac_param);
+    } else { 
+        ret = init_module(module, size, args);
+    }
 
     free(module);
 
