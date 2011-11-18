@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+
 #include <stdlib.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -53,12 +54,32 @@ static char iface[PROPERTY_VALUE_MAX];
 // TODO: use new ANDROID_SOCKET mechanism, once support for multiple
 // sockets is in
 
+#ifndef WIFI_DRIVER_MODULE_PATH
+#define WIFI_DRIVER_MODULE_PATH         "/system/lib/modules/wlan.ko"
+#endif
+#ifndef WIFI_DRIVER_MODULE_NAME
+#define WIFI_DRIVER_MODULE_NAME         "wlan"
+#endif
+#ifndef WIFI_SDIO_IF_DRIVER_MODULE_PATH
+#define WIFI_SDIO_IF_DRIVER_MODULE_PATH ""
+#endif
+#ifndef WIFI_SDIO_IF_DRIVER_MODULE_NAME
+#define WIFI_SDIO_IF_DRIVER_MODULE_NAME ""
+#endif
+#ifndef WIFI_FIRMWARE_LOADER
+#define WIFI_FIRMWARE_LOADER                    ""
+#endif
+#ifndef WIFI_SDIO_IF_DRIVER_MODULE_ARG
+#define WIFI_SDIO_IF_DRIVER_MODULE_ARG          ""
+#endif
+
 #ifndef WIFI_DRIVER_MODULE_ARG
 #define WIFI_DRIVER_MODULE_ARG          ""
 #endif
 #ifndef WIFI_FIRMWARE_LOADER
 #define WIFI_FIRMWARE_LOADER		""
 #endif
+
 #define WIFI_TEST_INTERFACE		"sta"
 
 #ifndef WIFI_DRIVER_FW_PATH_STA
@@ -76,8 +97,18 @@ static char iface[PROPERTY_VALUE_MAX];
 #endif
 
 #define WIFI_DRIVER_LOADER_DELAY	1000000
+#define RDY_WAIT_MS                     10
 
-static const char IFACE_DIR[]           = "/data/system/wpa_supplicant";
+static const char SUPP_RDY_PROP_NAME[]  = "wifi.wpa_supp_ready";
+static const char SDIO_POLLING_ON[]     = "/etc/init.qcom.sdio.sh 1";
+static const char SDIO_POLLING_OFF[]    = "/etc/init.qcom.sdio.sh 0";
+static const char LOCK_FILE[]           = "/data/misc/wifi/drvr_ld_lck_pid";
+static int _wifi_unload_driver();   /* Does not check Bluetooth status */
+static const char DRIVER_SDIO_IF_MODULE_NAME[]  = WIFI_SDIO_IF_DRIVER_MODULE_NAME;
+static const char DRIVER_SDIO_IF_MODULE_PATH[]  = WIFI_SDIO_IF_DRIVER_MODULE_PATH;
+static const char DRIVER_SDIO_IF_MODULE_ARG[]   = WIFI_SDIO_IF_DRIVER_MODULE_ARG;
+
+static const char IFACE_DIR[]           = "";
 #ifdef WIFI_DRIVER_MODULE_PATH
 static const char DRIVER_MODULE_NAME[]  = WIFI_DRIVER_MODULE_NAME;
 static const char DRIVER_MODULE_TAG[]   = WIFI_DRIVER_MODULE_NAME " ";
@@ -200,13 +231,29 @@ int wifi_load_driver()
 #ifdef WIFI_DRIVER_MODULE_PATH
     char driver_status[PROPERTY_VALUE_MAX];
     int count = 100; /* wait at most 20 seconds for completion */
+    int status = -1;
 
     if (is_wifi_driver_loaded()) {
         return 0;
     }
 
-    if (insmod(DRIVER_MODULE_PATH, DRIVER_MODULE_ARG) < 0)
-        return -1;
+    property_set(DRIVER_PROP_NAME, "loading");
+
+    if(system(SDIO_POLLING_ON))
+        LOGW("Couldn't turn on SDIO polling: %s", SDIO_POLLING_ON);
+
+    if ('\0' != *DRIVER_SDIO_IF_MODULE_PATH) {
+       if (insmod(DRIVER_SDIO_IF_MODULE_PATH, DRIVER_SDIO_IF_MODULE_ARG) < 0) {
+           goto end;
+       }
+    }
+
+    if (insmod(DRIVER_MODULE_PATH, DRIVER_MODULE_ARG) < 0) {
+        if ('\0' != *DRIVER_SDIO_IF_MODULE_NAME) {
+           rmmod(DRIVER_SDIO_IF_MODULE_NAME);
+        }
+        goto end;
+    }
 
     if (strcmp(FIRMWARE_LOADER,"") == 0) {
         /* usleep(WIFI_DRIVER_LOADER_DELAY); */
@@ -215,45 +262,61 @@ int wifi_load_driver()
     else {
         property_set("ctl.start", FIRMWARE_LOADER);
     }
+
     sched_yield();
     while (count-- > 0) {
         if (property_get(DRIVER_PROP_NAME, driver_status, NULL)) {
-            if (strcmp(driver_status, "ok") == 0)
-                return 0;
-            else if (strcmp(DRIVER_PROP_NAME, "failed") == 0) {
-                wifi_unload_driver();
-                return -1;
+            if (strcmp(driver_status, "ok") == 0) {
+                status = 0;
+                goto end;
+            }
+            else if (strcmp(driver_status, "failed") == 0) {
+                _wifi_unload_driver();
+                goto end;
             }
         }
         usleep(200000);
     }
     property_set(DRIVER_PROP_NAME, "timeout");
     wifi_unload_driver();
-    return -1;
+end:
+    system(SDIO_POLLING_OFF);
+    return status;
 #else
     property_set(DRIVER_PROP_NAME, "ok");
     return 0;
 #endif
 }
 
-int wifi_unload_driver()
+static int _wifi_unload_driver()
 {
-    usleep(200000); /* allow to finish interface down */
-#ifdef WIFI_DRIVER_MODULE_PATH
+    int count = 20; /* wait at most 10 seconds for completion */
+    char driver_status[PROPERTY_VALUE_MAX];
+    int s, ret;
+
     if (rmmod(DRIVER_MODULE_NAME) == 0) {
-        int count = 20; /* wait at most 10 seconds for completion */
         while (count-- > 0) {
             if (!is_wifi_driver_loaded())
                 break;
             usleep(500000);
         }
-        usleep(500000); /* allow card removal */
         if (count) {
-            return 0;
+            if (rmmod(DRIVER_SDIO_IF_MODULE_NAME) == 0) {
+                return 0;
+            }
         }
+
         return -1;
-    } else
+    }
+    else
         return -1;
+}
+
+int wifi_unload_driver()
+{
+    usleep(200000); /* allow to finish interface down */
+#ifdef WIFI_DRIVER_MODULE_PATH
+    return _wifi_unload_driver();
 #else
     property_set(DRIVER_PROP_NAME, "unloaded");
     return 0;
@@ -480,6 +543,9 @@ int wifi_start_supplicant_common(const char *config_file)
 #ifdef HAVE_LIBC_SYSTEM_PROPERTIES
     const prop_info *pi;
     unsigned serial = 0;
+    char supp_rdy_status[PROPERTY_VALUE_MAX] = "";
+    const prop_info *rdy_pi = NULL;
+    int rdy_loop_count = 0;
 #endif
 
     /* Check whether already running */
@@ -527,7 +593,18 @@ int wifi_start_supplicant_common(const char *config_file)
         if (pi != NULL) {
             __system_property_read(pi, NULL, supp_status);
             if (strcmp(supp_status, "running") == 0) {
-                return 0;
+                for (rdy_loop_count = 0; rdy_loop_count < 15000/RDY_WAIT_MS;
+                                rdy_loop_count ++) {
+                        if (rdy_pi == NULL) {
+                                rdy_pi = __system_property_find(SUPP_RDY_PROP_NAME);
+                        } else {
+                                __system_property_read(rdy_pi, NULL, supp_rdy_status);
+                                if (strcmp(supp_rdy_status, "1") == 0)
+                                        return 0;
+                        }
+                        usleep (RDY_WAIT_MS * 1000);
+                }
+                return -1;
             } else if (pi->serial != serial &&
                     strcmp(supp_status, "stopped") == 0) {
                 return -1;
