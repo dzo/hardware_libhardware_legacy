@@ -41,6 +41,12 @@ public:
                                          uint32_t *pChannels,
                                          uint32_t *pLatencyMs,
                                          AudioSystem::output_flags flags);
+    virtual audio_io_handle_t openSession(uint32_t *pDevices,
+                                    uint32_t *pFormat,
+                                    AudioSystem::output_flags flags,
+                                    int32_t  streamType,
+                                    int32_t  sessionId);
+    virtual status_t closeSession(audio_io_handle_t output);
     virtual audio_io_handle_t openDuplicateOutput(audio_io_handle_t output1,
                                                   audio_io_handle_t output2);
     virtual status_t closeOutput(audio_io_handle_t output);
