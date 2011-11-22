@@ -1080,6 +1080,13 @@ AudioPolicyManagerBase::AudioPolicyManagerBase(AudioPolicyClientInterface *clien
                         AudioSystem::DEVICE_OUT_SPEAKER;
     mAvailableInputDevices = AudioSystem::DEVICE_IN_BUILTIN_MIC;
 
+#ifdef USE_HDMI_AS_PRIMARY
+    // If HDMI is used as primary then all audio should always be
+    // routed to HDMI by default. The connection can be assumed to
+    // be always ON. Overrideable by Bluetooth.
+    mAvailableOutputDevices |= AUDIO_DEVICE_OUT_AUX_DIGITAL;
+#endif
+
 #ifdef WITH_A2DP
     mA2dpOutput = 0;
     mDuplicatedOutput = 0;

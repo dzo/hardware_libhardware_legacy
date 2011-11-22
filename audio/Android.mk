@@ -35,6 +35,10 @@ ifeq ($(BOARD_HAVE_BLUETOOTH),true)
   LOCAL_CFLAGS += -DWITH_A2DP
 endif
 
+ifeq ($(TARGET_USE_HDMI_AS_PRIMARY),true)
+    LOCAL_CFLAGS += -DUSE_HDMI_AS_PRIMARY
+endif
+
 LOCAL_STATIC_LIBRARIES := libmedia_helper
 LOCAL_MODULE := libaudiopolicy_legacy
 LOCAL_MODULE_TAGS := optional
