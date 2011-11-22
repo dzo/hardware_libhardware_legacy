@@ -80,7 +80,9 @@ static char iface[PROPERTY_VALUE_MAX];
 #define WIFI_FIRMWARE_LOADER		""
 #endif
 
+#ifndef WIFI_TEST_INTERFACE
 #define WIFI_TEST_INTERFACE		"sta"
+#endif
 
 #ifndef WIFI_DRIVER_FW_PATH_STA
 #define WIFI_DRIVER_FW_PATH_STA		NULL
@@ -859,6 +861,7 @@ int wifi_change_fw_path(const char *fwpath)
     int fd;
     int ret = 0;
 
+    return ret;
     if (!fwpath)
         return ret;
     fd = open(WIFI_DRIVER_FW_PATH_PARAM, O_WRONLY);
