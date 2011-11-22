@@ -471,6 +471,7 @@ audio_io_handle_t AudioPolicyManagerBase::getOutput(AudioSystem::stream_type str
 
         LOGV("getOutput() opening direct output device %x", device);
         AudioOutputDescriptor *outputDesc = new AudioOutputDescriptor();
+        device = AudioSystem::DEVICE_OUT_DIRECTOUTPUT;
         outputDesc->mDevice = device;
         outputDesc->mSamplingRate = samplingRate;
         outputDesc->mFormat = format;
@@ -2272,8 +2273,11 @@ bool AudioPolicyManagerBase::needsDirectOuput(AudioSystem::stream_type stream,
                                     AudioSystem::output_flags flags,
                                     uint32_t device)
 {
+   LOGV("AudioPolicyManagerBase::needsDirectOuput stream = %d mPhoneState = %d \n", stream, mPhoneState);
    return ((flags & AudioSystem::OUTPUT_FLAG_DIRECT) ||
-          (format !=0 && !AudioSystem::isLinearPCM(format)));
+          (format !=0 && !AudioSystem::isLinearPCM(format)) ||
+          ((stream == AudioSystem::VOICE_CALL) && (channels == AudioSystem::CHANNEL_OUT_MONO)
+          && ((samplingRate == 8000 )||(samplingRate == 16000 ))));
 }
 
 uint32_t AudioPolicyManagerBase::getMaxEffectsCpuLoad()
