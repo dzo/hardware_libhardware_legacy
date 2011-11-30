@@ -303,7 +303,12 @@ static int _wifi_unload_driver()
             usleep(500000);
         }
         if (count) {
-            if (rmmod(DRIVER_SDIO_IF_MODULE_NAME) == 0) {
+            if ('\0' != *DRIVER_SDIO_IF_MODULE_NAME) {
+                if (rmmod(DRIVER_SDIO_IF_MODULE_NAME) == 0) {
+                    return 0;
+                }
+            }
+            else  {
                 return 0;
             }
         }
