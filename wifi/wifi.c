@@ -110,7 +110,7 @@ static const char DRIVER_SDIO_IF_MODULE_NAME[]  = WIFI_SDIO_IF_DRIVER_MODULE_NAM
 static const char DRIVER_SDIO_IF_MODULE_PATH[]  = WIFI_SDIO_IF_DRIVER_MODULE_PATH;
 static const char DRIVER_SDIO_IF_MODULE_ARG[]   = WIFI_SDIO_IF_DRIVER_MODULE_ARG;
 
-static const char IFACE_DIR[]           = "";
+static const char IFACE_DIR[]           = "/data/system/wpa_supplicant";
 #ifdef WIFI_DRIVER_MODULE_PATH
 static const char DRIVER_MODULE_NAME[]  = WIFI_DRIVER_MODULE_NAME;
 static const char DRIVER_MODULE_TAG[]   = WIFI_DRIVER_MODULE_NAME " ";
@@ -377,7 +377,9 @@ int update_ctrl_interface(const char *config_file) {
     char *pbuf;
     char *sptr;
     struct stat sb;
-
+    /* Return from here as same ctrl_iface is used
+                     in  both p2p and wpa_supplicant conf files */
+    return 0;
     if (stat(config_file, &sb) != 0)
         return -1;
 
