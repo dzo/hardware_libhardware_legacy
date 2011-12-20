@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2008 The Android Open Source Project
+ * Copyright (c) 2008-2012, Code Aurora Forum. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -250,6 +251,7 @@ public:
         DEVICE_OUT_ANC_HEADPHONE = 0x8000,
         DEVICE_OUT_FM_TX = 0x10000,
         DEVICE_OUT_DIRECTOUTPUT = 0x20000,
+        DEVICE_OUT_PROXY = 0x40000,
         DEVICE_OUT_DEFAULT = 0x80000,
         DEVICE_OUT_ALL = (DEVICE_OUT_EARPIECE | DEVICE_OUT_SPEAKER | DEVICE_OUT_WIRED_HEADSET |
                 DEVICE_OUT_WIRED_HEADPHONE | DEVICE_OUT_BLUETOOTH_SCO | DEVICE_OUT_BLUETOOTH_SCO_HEADSET |
@@ -258,7 +260,7 @@ public:
                 DEVICE_OUT_ANLG_DOCK_HEADSET | DEVICE_OUT_DGTL_DOCK_HEADSET |
                 DEVICE_OUT_ANC_HEADSET | DEVICE_OUT_ANC_HEADPHONE |
                 DEVICE_OUT_FM | DEVICE_OUT_FM_TX | DEVICE_OUT_DIRECTOUTPUT |
-                DEVICE_OUT_DEFAULT),
+                DEVICE_OUT_PROXY | DEVICE_OUT_DEFAULT),
         DEVICE_OUT_ALL_A2DP = (DEVICE_OUT_BLUETOOTH_A2DP | DEVICE_OUT_BLUETOOTH_A2DP_HEADPHONES |
                 DEVICE_OUT_BLUETOOTH_A2DP_SPEAKER),
 
