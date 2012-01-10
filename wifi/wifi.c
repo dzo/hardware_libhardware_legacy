@@ -98,6 +98,14 @@ static char iface[PROPERTY_VALUE_MAX];
 #define WIFI_DRIVER_FW_PATH_PARAM	"/sys/module/wlan/parameters/fwpath"
 #endif
 
+#ifndef WIFI_DRIVER_DEF_CONF_FILE
+#define WIFI_DRIVER_DEF_CONF_FILE   ""
+#endif
+
+#ifndef WIFI_DRIVER_CONF_FILE
+#define WIFI_DRIVER_CONF_FILE       ""
+#endif
+
 #define WIFI_DRIVER_LOADER_DELAY	1000000
 #define RDY_WAIT_MS                     10
 
@@ -126,12 +134,15 @@ static const char SUPP_CONFIG_FILE[]    = "/data/misc/wifi/wpa_supplicant.conf";
 static const char P2P_CONFIG_FILE[]     = "/data/misc/wifi/p2p_supplicant.conf";
 static const char CONTROL_IFACE_PATH[]  = "/data/misc/wifi";
 static const char MODULE_FILE[]         = "/proc/modules";
-
+static const char DRIVER_CFG_DEF_FILE[] = WIFI_DRIVER_DEF_CONF_FILE;
+static const char DRIVER_CFG_FILE[]     = WIFI_DRIVER_CONF_FILE;
 static const char SUPP_ENTROPY_FILE[]   = WIFI_ENTROPY_FILE;
 static unsigned char dummy_key[21] = { 0x02, 0x11, 0xbe, 0x33, 0x43, 0x35,
                                        0x68, 0x47, 0x84, 0x99, 0xa9, 0x2b,
                                        0x1c, 0xd3, 0xee, 0xff, 0xf1, 0xe2,
                                        0xf3, 0xf4, 0xf5 };
+
+static int ensure_wlan_driver_config_file_exists();
 
 static int insmod(const char *filename, const char *args)
 {
@@ -238,7 +249,10 @@ int wifi_load_driver()
     if (is_wifi_driver_loaded()) {
         return 0;
     }
-
+    /* ensure that wlan driver config file exists (if specified) */
+    if (ensure_wlan_driver_config_file_exists()) {
+        return -1;
+    }
     property_set(DRIVER_PROP_NAME, "loading");
 
     if(system(SDIO_POLLING_ON))
@@ -437,13 +451,59 @@ int update_ctrl_interface(const char *config_file) {
     return 0;
 }
 
-int ensure_config_file_exists(const char *config_file)
+static int copy_config_file(const char *dest_file, const char *source_file)
 {
-    char buf[2048];
     int srcfd, destfd;
-    struct stat sb;
+    char buf[2048];
     int nread;
-    int ret;
+
+    srcfd = open(source_file, O_RDONLY);
+    if (srcfd < 0) {
+        LOGE("Cannot open \"%s\": %s", source_file, strerror(errno));
+        return -1;
+    }
+    destfd = open(dest_file, O_CREAT|O_RDWR, 0660);
+    if (destfd < 0) {
+        close(srcfd);
+        LOGE("Cannot create \"%s\": %s", dest_file, strerror(errno));
+        return -1;
+    }
+
+    while ((nread = read(srcfd, buf, sizeof(buf))) != 0) {
+        if (nread < 0) {
+            LOGE("Error reading \"%s\": %s", source_file, strerror(errno));
+            close(srcfd);
+            close(destfd);
+            unlink(dest_file);
+            return -1;
+        }
+        write(destfd, buf, nread);
+    }
+
+    close(destfd);
+    close(srcfd);
+
+    /* chmod is needed because open() didn't set permisions properly */
+    if (chmod(dest_file, 0660) < 0) {
+        LOGE("Error changing permissions of %s to 0660: %s",
+             dest_file, strerror(errno));
+        unlink(dest_file);
+        return -1;
+    }
+    if (chown(dest_file, AID_SYSTEM, AID_WIFI) < 0) {
+        LOGE("Error changing group ownership of %s to %d: %s",
+             dest_file, AID_WIFI, strerror(errno));
+        unlink(dest_file);
+        return -1;
+    }
+
+    return 0;
+}
+
+int ensure_supplicant_config_file_exists(const char *config_file)
+{
+    int ret = 0;
+    struct stat sb;
 
     ret = access(config_file, R_OK|W_OK);
     if ((ret == 0) || (errno == EACCES)) {
@@ -460,46 +520,8 @@ int ensure_config_file_exists(const char *config_file)
         LOGE("Cannot access \"%s\": %s", config_file, strerror(errno));
         return -1;
     }
-
-    srcfd = open(SUPP_CONFIG_TEMPLATE, O_RDONLY);
-    if (srcfd < 0) {
-        LOGE("Cannot open \"%s\": %s", SUPP_CONFIG_TEMPLATE, strerror(errno));
-        return -1;
-    }
-
-    destfd = open(config_file, O_CREAT|O_RDWR, 0660);
-    if (destfd < 0) {
-        close(srcfd);
-        LOGE("Cannot create \"%s\": %s", config_file, strerror(errno));
-        return -1;
-    }
-
-    while ((nread = read(srcfd, buf, sizeof(buf))) != 0) {
-        if (nread < 0) {
-            LOGE("Error reading \"%s\": %s", SUPP_CONFIG_TEMPLATE, strerror(errno));
-            close(srcfd);
-            close(destfd);
-            unlink(config_file);
-            return -1;
-        }
-        write(destfd, buf, nread);
-    }
-
-    close(destfd);
-    close(srcfd);
-
-    /* chmod is needed because open() didn't set permisions properly */
-    if (chmod(config_file, 0660) < 0) {
-        LOGE("Error changing permissions of %s to 0660: %s",
-             config_file, strerror(errno));
-        unlink(config_file);
-        return -1;
-    }
-
-    if (chown(config_file, AID_SYSTEM, AID_WIFI) < 0) {
-        LOGE("Error changing group ownership of %s to %d: %s",
-             config_file, AID_WIFI, strerror(errno));
-        unlink(config_file);
+    if (copy_config_file(config_file, SUPP_CONFIG_TEMPLATE) != 0) {
+        LOGE("File copy failed: source %s: destination %s", SUPP_CONFIG_TEMPLATE, config_file);
         return -1;
     }
     return update_ctrl_interface(config_file);
@@ -564,7 +586,7 @@ int wifi_start_supplicant_common(const char *config_file)
     }
 
     /* Before starting the daemon, make sure its config file exists */
-    if (ensure_config_file_exists(config_file) < 0) {
+    if (ensure_supplicant_config_file_exists(config_file) < 0) {
         LOGE("Wi-Fi will not be enabled");
         return -1;
     }
@@ -883,4 +905,42 @@ int wifi_change_fw_path(const char *fwpath)
     }
     close(fd);
     return ret;
+}
+
+static int ensure_wlan_driver_config_file_exists()
+{
+    int ret = 0;
+    struct stat sb;
+
+    /* if config files are not specified, we probably don't need
+     * config file for this platform */
+    if (!*DRIVER_CFG_FILE || !*DRIVER_CFG_DEF_FILE) {
+        LOGI("wifi config files are not specified");
+        return 0;
+    }
+    ret = access(DRIVER_CFG_FILE, R_OK|W_OK);
+    if ((ret == 0) || (errno == EACCES)) {
+        /* even if we cannot change the permission do not return error,
+         * will try loading the driver anyway. */
+        if ((ret != 0) &&
+            (chmod(DRIVER_CFG_FILE, S_IRUSR|S_IWUSR|S_IRGRP) != 0)) {
+            LOGW("Cannot set permission to \"%s\": %s",
+                    DRIVER_CFG_FILE, strerror(errno));
+            return 0;
+        }
+        /* return if filesize is at least 10 bytes */
+        if (stat(DRIVER_CFG_FILE, &sb) == 0 && sb.st_size > 10) {
+            LOGE("File \"%s\" exists, not copying", DRIVER_CFG_FILE);
+            return 0;
+        }
+    } else if (errno != ENOENT) {
+        LOGE("Cannot access \"%s\": %s", DRIVER_CFG_FILE, strerror(errno));
+        return -1;
+    }
+    if (copy_config_file(DRIVER_CFG_FILE, DRIVER_CFG_DEF_FILE) != 0) {
+        LOGE("File copy failed: source \"%s\": destination \"%s\"",
+                DRIVER_CFG_DEF_FILE, DRIVER_CFG_FILE);
+        return -1;
+    }
+    return 0;
 }
