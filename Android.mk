@@ -9,7 +9,25 @@ LEGACY_AUDIO_MAKEFILES := $(call all-named-subdir-makefiles,audio)
 LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 
-LOCAL_SHARED_LIBRARIES := libcutils libwpa_client
+LOCAL_MODULE := libhwrpc.so
+LOCAL_SRC_FILES := libhwrpc.so
+LOCAL_MODULE_TAGS := optional
+LOCAL_MODULE_CLASS := SHARED_LIBRARIES
+
+include $(BUILD_PREBUILT)
+
+include $(CLEAR_VARS)
+
+LOCAL_MODULE := oem_rpc_svc
+LOCAL_SRC_FILES := oem_rpc_svc
+LOCAL_MODULE_TAGS := optional
+LOCAL_MODULE_CLASS := EXECUTABLES
+
+include $(BUILD_PREBUILT)
+
+include $(CLEAR_VARS)
+
+LOCAL_SHARED_LIBRARIES := libcutils libwpa_client libhwrpc
 
 LOCAL_INCLUDES += $(LOCAL_PATH)
 

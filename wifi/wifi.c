@@ -143,18 +143,33 @@ static unsigned char dummy_key[21] = { 0x02, 0x11, 0xbe, 0x33, 0x43, 0x35,
                                        0xf3, 0xf4, 0xf5 };
 
 static int ensure_wlan_driver_config_file_exists();
+extern void huawei_oem_rapi_streaming_function(int n, int p1, int p2, int p3, char *v1, int *v2, int *v3);
 
 static int insmod(const char *filename, const char *args)
 {
     void *module;
     unsigned int size;
     int ret;
+    char x[8];
+    int  y;
+    char mac_param[64];
+
 
     module = load_file(filename, &size);
     if (!module)
         return -1;
 
-    ret = init_module(module, size, args);
+    if(strstr(filename,"wlan.ko")) {
+        memset(x,0,8);
+        y=0;
+        huawei_oem_rapi_streaming_function(3,0,0,0,0,&y,x);
+        LOGI("huawei_oem_rapi_streaming_function %p %x %x",x,x[0],y);
+        sprintf(mac_param,"mac_param=%02X:%02X:%02X:%02X:%02X:%02X ",x[5],x[4],x[3],x[2],x[1],x[0]);
+        LOGI("Got MAC Address: %s ",mac_param);
+        ret = init_module(module, size, mac_param);
+    } else { 
+        ret = init_module(module, size, args);
+    }
 
     free(module);
 
@@ -624,7 +639,7 @@ int wifi_start_supplicant_common(const char *config_file)
         if (pi != NULL) {
             __system_property_read(pi, NULL, supp_status);
             if (strcmp(supp_status, "running") == 0) {
-                for (rdy_loop_count = 0; rdy_loop_count < 15000/RDY_WAIT_MS;
+/*                for (rdy_loop_count = 0; rdy_loop_count < 15000/RDY_WAIT_MS;
                                 rdy_loop_count ++) {
                         if (rdy_pi == NULL) {
                                 rdy_pi = __system_property_find(SUPP_RDY_PROP_NAME);
@@ -635,7 +650,8 @@ int wifi_start_supplicant_common(const char *config_file)
                         }
                         usleep (RDY_WAIT_MS * 1000);
                 }
-                return -1;
+*/
+                return 0;
             } else if (pi->serial != serial &&
                     strcmp(supp_status, "stopped") == 0) {
                 return -1;
@@ -717,6 +733,7 @@ int wifi_connect_to_supplicant()
         return -1;
     }
     if (wpa_ctrl_attach(monitor_conn) != 0) {
+        LOGE("Unable to wpa_ctrl_attach %d %s",monitor_conn,strerror(errno));
         wpa_ctrl_close(monitor_conn);
         wpa_ctrl_close(ctrl_conn);
         ctrl_conn = monitor_conn = NULL;
