@@ -160,11 +160,14 @@ static int insmod(const char *filename, const char *args)
         return -1;
 
     if(strstr(filename,"wlan.ko")) {
-        memset(x,0,8);
-        y=0;
-        huawei_oem_rapi_streaming_function(3,0,0,0,0,&y,x);
-        LOGI("huawei_oem_rapi_streaming_function %p %x %x",x,x[0],y);
-        sprintf(mac_param,"mac_param=%02X:%02X:%02X:%02X:%02X:%02X ",x[5],x[4],x[3],x[2],x[1],x[0]);
+	property_get("persist.sys.wifimac",mac_param,"");
+	if(!strcmp(mac_param,"")) {
+	        memset(x,0,8);
+	        y=0;
+	        huawei_oem_rapi_streaming_function(3,0,0,0,0,&y,x);
+	        LOGI("huawei_oem_rapi_streaming_function %p %x %x",x,x[0],y);
+	        sprintf(mac_param,"mac_param=%02X:%02X:%02X:%02X:%02X:%02X ",x[5],x[4],x[3],x[2],x[1],x[0]);
+	}
         LOGI("Got MAC Address: %s ",mac_param);
         ret = init_module(module, size, mac_param);
     } else { 
@@ -639,7 +642,7 @@ int wifi_start_supplicant_common(const char *config_file)
         if (pi != NULL) {
             __system_property_read(pi, NULL, supp_status);
             if (strcmp(supp_status, "running") == 0) {
-/*                for (rdy_loop_count = 0; rdy_loop_count < 15000/RDY_WAIT_MS;
+                for (rdy_loop_count = 0; rdy_loop_count < 15000/RDY_WAIT_MS;
                                 rdy_loop_count ++) {
                         if (rdy_pi == NULL) {
                                 rdy_pi = __system_property_find(SUPP_RDY_PROP_NAME);
@@ -650,8 +653,7 @@ int wifi_start_supplicant_common(const char *config_file)
                         }
                         usleep (RDY_WAIT_MS * 1000);
                 }
-*/
-                return 0;
+                return -1;
             } else if (pi->serial != serial &&
                     strcmp(supp_status, "stopped") == 0) {
                 return -1;
@@ -714,11 +716,11 @@ int wifi_connect_to_supplicant()
         return -1;
     }
 
-    if (access(IFACE_DIR, F_OK) == 0) {
-        snprintf(ifname, sizeof(ifname), "%s/%s", IFACE_DIR, iface);
-    } else {
+//    if (access(IFACE_DIR, F_OK) == 0) {
+//        snprintf(ifname, sizeof(ifname), "%s/%s", IFACE_DIR, iface);
+//    } else {
         strlcpy(ifname, iface, sizeof(ifname));
-    }
+//    }
 
     ctrl_conn = wpa_ctrl_open(ifname);
     if (ctrl_conn == NULL) {
