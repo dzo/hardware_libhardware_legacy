@@ -185,7 +185,7 @@ static int rmmod(const char *modname)
     int maxtry = 10;
 
     while (maxtry-- > 0) {
-        ret = delete_module(modname, O_NONBLOCK | O_EXCL);
+        ret = delete_module(modname, O_NONBLOCK | O_EXCL | O_TRUNC);
         if (ret < 0 && errno == EAGAIN)
             usleep(500000);
         else
