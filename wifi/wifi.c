@@ -57,6 +57,7 @@ static char iface[PROPERTY_VALUE_MAX];
 #ifndef WIFI_DRIVER_MODULE_PATH
 #define WIFI_DRIVER_MODULE_PATH         "/system/lib/modules/wlan.ko"
 #endif
+#define NEW_WIFI_DRIVER_MODULE_PATH         "/system/lib/modules/wlan_new.ko"
 #ifndef WIFI_DRIVER_MODULE_NAME
 #define WIFI_DRIVER_MODULE_NAME         "wlan"
 #endif
@@ -123,6 +124,7 @@ static const char IFACE_DIR[]           = "/data/system/wpa_supplicant";
 static const char DRIVER_MODULE_NAME[]  = WIFI_DRIVER_MODULE_NAME;
 static const char DRIVER_MODULE_TAG[]   = WIFI_DRIVER_MODULE_NAME " ";
 static const char DRIVER_MODULE_PATH[]  = WIFI_DRIVER_MODULE_PATH;
+static const char NEW_DRIVER_MODULE_PATH[]  = NEW_WIFI_DRIVER_MODULE_PATH;
 static const char DRIVER_MODULE_ARG[]   = WIFI_DRIVER_MODULE_ARG;
 #endif
 static const char FIRMWARE_LOADER[]     = WIFI_FIRMWARE_LOADER;
@@ -159,7 +161,7 @@ static int insmod(const char *filename, const char *args)
     if (!module)
         return -1;
 
-    if(strstr(filename,"wlan.ko")) {
+    if(strstr(filename,"wlan.ko") || strstr(filename,"wlan_new.ko")) {
 	property_get("persist.sys.wifimac",mac_param,"");
 	if(!strcmp(mac_param,"")) {
 	        memset(x,0,8);
@@ -282,11 +284,21 @@ int wifi_load_driver()
        }
     }
 
-    if (insmod(DRIVER_MODULE_PATH, DRIVER_MODULE_ARG) < 0) {
-        if ('\0' != *DRIVER_SDIO_IF_MODULE_NAME) {
-           rmmod(DRIVER_SDIO_IF_MODULE_NAME);
+    property_get("persist.sys.wifi.newdriver",driver_status,NULL);
+    if(!strcmp(driver_status,"1")) {
+        if (insmod(NEW_DRIVER_MODULE_PATH, DRIVER_MODULE_ARG) < 0) {
+            if ('\0' != *DRIVER_SDIO_IF_MODULE_NAME) {
+                rmmod(DRIVER_SDIO_IF_MODULE_NAME);
+            }
+            goto end;
         }
-        goto end;
+    } else {
+        if (insmod(DRIVER_MODULE_PATH, DRIVER_MODULE_ARG) < 0) {
+            if ('\0' != *DRIVER_SDIO_IF_MODULE_NAME) {
+               rmmod(DRIVER_SDIO_IF_MODULE_NAME);
+            }
+            goto end;
+        }
     }
 
     if (strcmp(FIRMWARE_LOADER,"") == 0) {
