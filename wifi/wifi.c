@@ -284,7 +284,7 @@ int wifi_load_driver()
        }
     }
 
-    property_get("persist.sys.wifi.newdriver",driver_status,NULL);
+/*    property_get("persist.sys.wifi.newdriver",driver_status,NULL);
     if(!strcmp(driver_status,"1")) {
         if (insmod(NEW_DRIVER_MODULE_PATH, DRIVER_MODULE_ARG) < 0) {
             if ('\0' != *DRIVER_SDIO_IF_MODULE_NAME) {
@@ -293,16 +293,17 @@ int wifi_load_driver()
             goto end;
         }
     } else {
+*/
         if (insmod(DRIVER_MODULE_PATH, DRIVER_MODULE_ARG) < 0) {
             if ('\0' != *DRIVER_SDIO_IF_MODULE_NAME) {
                rmmod(DRIVER_SDIO_IF_MODULE_NAME);
             }
             goto end;
         }
-    }
+//    }
 
     if (strcmp(FIRMWARE_LOADER,"") == 0) {
-        /* usleep(WIFI_DRIVER_LOADER_DELAY); */
+        usleep(WIFI_DRIVER_LOADER_DELAY);
         property_set(DRIVER_PROP_NAME, "ok");
     }
     else {
