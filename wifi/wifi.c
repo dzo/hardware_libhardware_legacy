@@ -303,7 +303,7 @@ int wifi_load_driver()
 //    }
 
     if (strcmp(FIRMWARE_LOADER,"") == 0) {
-        usleep(WIFI_DRIVER_LOADER_DELAY);
+//        usleep(WIFI_DRIVER_LOADER_DELAY);
         property_set(DRIVER_PROP_NAME, "ok");
     }
     else {
