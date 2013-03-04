@@ -347,6 +347,7 @@ static int _wifi_unload_driver()
                 break;
             usleep(500000);
         }
+        usleep(500000);
         if (count) {
             if ('\0' != *DRIVER_SDIO_IF_MODULE_NAME) {
                 if (rmmod(DRIVER_SDIO_IF_MODULE_NAME) == 0) {
@@ -655,6 +656,7 @@ int wifi_start_supplicant_common(const char *config_file)
         if (pi != NULL) {
             __system_property_read(pi, NULL, supp_status);
             if (strcmp(supp_status, "running") == 0) {
+		return 0;
                 for (rdy_loop_count = 0; rdy_loop_count < 15000/RDY_WAIT_MS;
                                 rdy_loop_count ++) {
                         if (rdy_pi == NULL) {
